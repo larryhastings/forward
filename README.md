@@ -32,6 +32,9 @@ declaration using the decorators would look like this:
 
 Specifically:
 
+* You have to make the module available.  You can just copy the `forward`
+  directory into the directory you want to work in, or you can install it
+  locally by installing the `flit` package from PyPI and running `flit install -s` .
 * You must import and use the two decorators from the `forward` module.
   The easiest way is to use `from forward import *` .
 * For the `forward class` statement, you instead decorate a conventional class

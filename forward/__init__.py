@@ -1,5 +1,10 @@
 # Demo of "forward" prototype by Larry Hastings, March 2022.
 # This software is placed in the public domain or under the CC0-1.0-Universal license, whichever is more permissive.
+"""
+Prototype of "forward class" / "continue class", using decorators.
+"""
+
+__version__ = "1.0"
 
 class _sample_class:
     pass
