@@ -1,4 +1,4 @@
-## Forward
+## forward
 
 ### A prototype of "forward class" / "continue class" using decorators
 
