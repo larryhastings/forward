@@ -46,3 +46,11 @@ Specifically:
   object as a parameter to the decorator.  The class you're decorating is
   thrown away (the `continue_` decorator returns `None`), so its name should
   be an unused variable; the class name `_` is preferred.
+
+Caveats:
+
+* To use slots, please declare them in the `forward` class.
+  (If the proposed `forward class`/`continue class` syntax is added
+  to Python, it will handle slots correctly, permitting them to be
+  declared in the `continue` class.)
+
