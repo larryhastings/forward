@@ -72,7 +72,7 @@ def continue_(forward_cls):
                 continue
             setattr(forward_cls, name, value)
 
-        return None
+        return forward_cls
     return continue_
 
 __all__ = ["forward", "continue_"]
