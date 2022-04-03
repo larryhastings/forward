@@ -57,3 +57,46 @@ Notes and caveats:
 * The `continue_` decorator returns the original "forwarded" class object.
   This permits you to stack additional decorators on the class; simply make
   sure you call the `continue_` decorator first.  (It should be on the bottom.)
+* This prototype doesn't support decorators that both examine the contents of
+  the class *and* return a different class, e.g. `@dataclass(slots=True)`.
+
+#### convert/ tools
+
+There's a cheap converter program in the `convert/` directory.  It attempts to
+automatically add the `@forward()` decorator to your class definitions.  It
+turns this:
+
+```Python
+    class foo(...):
+        pass
+```
+
+into this:
+
+```Python
+    @forward()
+    class foo(...):
+        ...
+
+    @continue_(foo)
+    class _:
+        pass
+```
+
+`convert/toggle_forward.py` will edit one or more Python files specified on the
+command-line, making the above change.  By default it will toggle the presence of `@forward`
+decorators.  You can also specify explicit behavior:
+
+`-f` adds `@forward` decorators.
+`-c` removes `@forward` decorators (changing back to *conventional class* statements).
+`-t` explicitly says "toggle".
+
+The parser is pretty dumb, so don't run it on anything precious.  If it goofs up, sorry!
+
+`convert/apply_to_stdlib.py` takes a path to a `Lib/` directory in a CPython checkout
+and recursively applies `toggle_forward.py` to nearly every Python file it finds
+underneath.  It skips the `test/` tree and one silly tester file.
+
+With a current checkout, adding `@forward()` decorators doesn't seem to break anything.
+The set of tests that fails remains the same before and after adding forward decorators.
+
