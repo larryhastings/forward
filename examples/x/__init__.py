@@ -12,3 +12,4 @@ class HandmadeAnnotations:
 
 HandmadeAnnotations.b = 0
 HandmadeAnnotations.__annotations__ = {'b': int}
+

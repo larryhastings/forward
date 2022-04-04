@@ -68,6 +68,15 @@ def is_class_definition(stripped):
 def get_indent(line, stripped):
     return line.partition(stripped)[0]
 
+line_prefixes_we_hate = [
+    "@dataclass(slots=True)",
+    "@enum.global_enum",
+    "@enum._simple_enum",
+    "@global_enum",
+    "@_simple_enum",
+    "__slots__ = ",
+    ]
+
 
 import_line = "from forward import *"
 
@@ -96,19 +105,24 @@ for arg in argv:
         state = "initial"
 
     lines = []
+    aborted = False
+    def abort():
+        global aborted
+        aborted = True
+        lines.clear()
 
     indent = None
-    abort = False
 
     with open(path, "rt", encoding="utf-8") as f:
         stat = os.stat(f.fileno())
-        if not stat.st_size:
-            # zero-byte file, just skip it.
-            continue
 
         times = stat.st_atime_ns, stat.st_mtime_ns
         found_a_file = True
+        modified = False
+
         for line in f:
+            if aborted:
+                break
             original = line.rstrip('\n')
             line = line.rstrip()
             stripped = line.lstrip()
@@ -117,28 +131,16 @@ for arg in argv:
                 lines.append(original)
                 continue
 
+            for prefix in line_prefixes_we_hate:
+                if stripped.startswith(prefix):
+                    abort()
+                    break
+            if aborted:
+                break
+
             if state == "detect":
                 if stripped.startswith("class "):
                     add_forward = True
-                    # insert import line
-                    line_no = 0
-                    if lines:
-                        if lines[0].startswith("#!"):
-                            line_no = 1
-                        double_quotes = ('"""', "'''")
-                        if lines[line_no].strip().startswith(double_quotes):
-                            marker = lines[line_no].strip()[:3]
-                            # detect """ foo """
-                            if not lines[line_no].partition(marker)[2].strip():
-                                line_no += 1
-                            while line_no < len(lines):
-                                if lines[line_no].strip().endswith(marker):
-                                    line_no += 1
-                                    break
-                                line_no += 1
-                                continue
-
-                    lines.insert(line_no, import_line)
 
                 elif stripped == import_line:
                     add_forward = False
@@ -153,13 +155,16 @@ for arg in argv:
                 # intentional fall-through
 
             if state == "initial":
-                if (not add_forward) and (stripped == "@forward()"):
-                    state = "emit class declaration"
+                if not add_forward:
+                    if stripped == "@forward()":
+                        state = "emit class declaration"
+                    elif stripped != import_line:
+                        lines.append(original)
                     continue
-                if add_forward:
+                else:
                     if stripped == "@forward()":
                         # this file already has forward declarations!
-                        abort = True
+                        abort()
                         break
 
                     if is_class_definition(stripped):
@@ -175,6 +180,7 @@ for arg in argv:
                         lines.append(indent + f"    ...")
                         lines.append(indent + f"@continue_({classname})")
                         lines.append(indent + f"class _:")
+                        modified = True
                         continue
                     lines.append(original)
                     continue
@@ -192,8 +198,29 @@ for arg in argv:
                 if stripped == "class _:":
                     state = "initial"
                 continue
-    if abort:
+
+    if not lines:
         continue
+
+    if add_forward and modified:
+        # insert import line
+        line_no = 0
+        if lines[0].startswith("#!"):
+            line_no = 1
+        double_quotes = ('"""', "'''")
+        if lines[line_no].strip().startswith(double_quotes):
+            marker = lines[line_no].strip()[:3]
+            # detect """ foo """
+            if not lines[line_no].partition(marker)[2].strip():
+                line_no += 1
+            while line_no < len(lines):
+                if lines[line_no].strip().endswith(marker):
+                    line_no += 1
+                    break
+                line_no += 1
+                continue
+
+        lines.insert(line_no, import_line)
 
     text = "\n".join(lines) + "\n"
     # output_path = path + ".txt"

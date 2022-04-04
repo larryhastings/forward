@@ -47,12 +47,9 @@ def continue_(forward_cls):
         assert hasattr(forward_cls, '__init__')
         if forward_cls.__init__ == forward_cls.__forward_new_init__:
             if forward_cls.__forward_original_init__ == None:
-                # print(f"{forward_cls.__name__}: deleting init")
                 del forward_cls.__init__
             else:
-                # print(f"{forward_cls.__name__}: restoring original init {forward_cls.__forward_original_init__}")
                 forward_cls.__init__ = forward_cls.__forward_original_init__
-            # del forward_cls.__init__
         del forward_cls.__forward_original_init__
         del forward_cls.__forward_new_init__
 
@@ -71,6 +68,14 @@ def continue_(forward_cls):
             if name in existing_attributes:
                 continue
             setattr(forward_cls, name, value)
+
+            # fix no-argument super! wow!
+            # real "forward class" / "continue class" support
+            # won't need hacks like this.
+            if callable(value) and hasattr(value, "__closure__") and value.__closure__:
+                for closure in value.__closure__:
+                    if closure.cell_contents == continue_cls:
+                        closure.cell_contents = forward_cls
 
         return forward_cls
     return continue_

@@ -2,6 +2,7 @@
 
 # Demo of "forward" prototype by Larry Hastings, March 2022.
 # This software is placed in the public domain or under the CC0-1.0-Universal license, whichever is more permissive.
+
 import x
 
 try:
@@ -13,7 +14,7 @@ except TypeError:
     pass
 
 
-import x_impl
+import x.impl
 
 i = x.ImportantFunctionality("second try")
 i.print()

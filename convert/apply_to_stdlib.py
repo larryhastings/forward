@@ -7,6 +7,15 @@ exceptions = [
     # skip this silly EOL tester thing
     ("/tests/data", "crlf.py"),
 
+    # some metaclass problem?
+    ("", "enum.py"),
+
+    # slots
+    ("", "weakref.py"),
+
+    # skip this goofy """#" nonsense, wtf
+    (None, "encodings"),
+
     # skip the entire test tree (for now?)
     (None, "test"),
     ]
@@ -47,7 +56,7 @@ processed_count = 0
 for (dirpath, dirnames, filenames) in os.walk(path):
 
     for exc_dirpath_suffix, exc_filename in exceptions:
-        if (not exc_dirpath_suffix) and (exc_filename in dirnames):
+        if (exc_dirpath_suffix is None) and (exc_filename in dirnames):
             # print("skip the", exc_filename, f"tree in {dirpath}.")
             dirnames.remove(exc_filename)
 
@@ -55,13 +64,15 @@ for (dirpath, dirnames, filenames) in os.walk(path):
         if not filename.endswith(".py"):
             continue
         for exc_dirpath_suffix, exc_filename in exceptions:
-            if exc_dirpath_suffix and dirpath.endswith(exc_dirpath_suffix) and filename == exc_filename:
+            if ((exc_dirpath_suffix is not None)
+                and dirpath.endswith(exc_dirpath_suffix)
+                and (filename == exc_filename)):
                 filename = None
                 break
         if not filename:
             continue
-        path = os.path.join(dirpath, filename)
-        paths.append(path)
+        file_path = os.path.join(dirpath, filename)
+        paths.append(file_path)
         processed_count += 1
 
         if len(paths) >= 20:
