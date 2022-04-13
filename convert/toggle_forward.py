@@ -19,7 +19,7 @@ into
         ...
 
     @continue_(foo)
-    class _:
+    class _____:
         pass
 
 It can also reverse this transformation.
@@ -79,6 +79,10 @@ line_prefixes_we_hate = [
 
 
 import_line = "from forward import *"
+del_forward_line = "del forward"
+del_continue__line = "del continue_"
+
+lines_to_strip = {import_line, del_forward_line, del_continue__line}
 
 class_name_re = re.compile("^class ([_A-Za-z0-9]+)[( :]")
 
@@ -158,8 +162,10 @@ for arg in argv:
                 if not add_forward:
                     if stripped == "@forward()":
                         state = "emit class declaration"
-                    elif stripped != import_line:
+                    elif stripped not in lines_to_strip:
                         lines.append(original)
+                    else:
+                        modified = True
                     continue
                 else:
                     if stripped == "@forward()":
@@ -179,7 +185,7 @@ for arg in argv:
                         lines.append(original)
                         lines.append(indent + f"    ...")
                         lines.append(indent + f"@continue_({classname})")
-                        lines.append(indent + f"class _:")
+                        lines.append(indent + f"class _____:")
                         modified = True
                         continue
                     lines.append(original)
@@ -191,36 +197,48 @@ for arg in argv:
                 # @forward() must be followed by class definition
                 assert is_class_definition(stripped), "didn't find class definition when we expected it, file " + repr(path) + " line " + repr(line)
                 lines.append(original)
-                state = "looking for class _"
+                state = "looking for class _____"
                 continue
 
-            if state == "looking for class _":
-                if stripped == "class _:":
+            if state == "looking for class _____":
+                if stripped == "class _____:":
                     state = "initial"
+                else:
+                    modified = True
                 continue
 
     if not lines:
         continue
 
-    if add_forward and modified:
-        # insert import line
-        line_no = 0
-        if lines[0].startswith("#!"):
-            line_no = 1
-        double_quotes = ('"""', "'''")
-        if lines[line_no].strip().startswith(double_quotes):
-            marker = lines[line_no].strip()[:3]
-            # detect """ foo """
-            if not lines[line_no].partition(marker)[2].strip():
-                line_no += 1
-            while line_no < len(lines):
-                if lines[line_no].strip().endswith(marker):
+    if modified:
+        if add_forward:
+            # insert import line
+            line_no = 0
+            if lines[0].startswith("#!"):
+                line_no = 1
+            double_quotes = ('"""', "'''")
+            if lines[line_no].strip().startswith(double_quotes):
+                marker = lines[line_no].strip()[:3]
+                # detect """ foo """
+                if not lines[line_no].partition(marker)[2].strip():
                     line_no += 1
-                    break
-                line_no += 1
-                continue
+                while line_no < len(lines):
+                    if lines[line_no].strip().endswith(marker):
+                        line_no += 1
+                        break
+                    line_no += 1
+                    continue
 
-        lines.insert(line_no, import_line)
+            lines.insert(line_no, import_line)
+            lines.append("")
+            lines.append(del_forward_line)
+            lines.append(del_continue__line)
+            lines.append("")
+        else:
+            # stripping two trailing blank lines, because we added two.
+            for _ in range(2):
+                if not lines[-1]:
+                    lines.pop()
 
     text = "\n".join(lines) + "\n"
     # output_path = path + ".txt"

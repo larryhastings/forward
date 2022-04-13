@@ -15,16 +15,15 @@ class _sample_class_with_bases_and_metaclass(_sample_class, metaclass=type):
 dont_overwrite_attributes = {"__module__",}
 existing_attributes = set(_sample_class.__dict__) | set(_sample_class_with_bases_and_metaclass.__dict__)
 
+object_init = object.__init__
+
 def forward():
     def forward(cls):
         cls.__forward__ = True
-        name = cls.__name__
-        message = f"{name} is a forward-declared class"
+        message = f"{cls.__name__} is a forward-declared class"
         def __init__(self, *a, **kw):
             raise TypeError(message)
-        cls.__forward_original_init__ = getattr(cls, '__init__', None)
-        cls.__forward_new_init__ = __init__
-        cls.__init__ = __init__
+        cls.__forward_new_init__ =  cls.__init__ = __init__
         return cls
     return forward
 
@@ -42,36 +41,30 @@ def continue_(forward_cls):
 
         del forward_cls.__forward__
 
-        assert hasattr(forward_cls, '__forward_original_init__')
-        assert hasattr(forward_cls, '__forward_new_init__')
         assert hasattr(forward_cls, '__init__')
+        # if they haven't touched forward_cls.__init__, remove it.
+        # (if they set an explicit init it should be in the continue class.)
         if forward_cls.__init__ == forward_cls.__forward_new_init__:
-            if forward_cls.__forward_original_init__ == None:
-                del forward_cls.__init__
-            else:
-                forward_cls.__init__ = forward_cls.__forward_original_init__
-        del forward_cls.__forward_original_init__
+            del forward_cls.__init__
         del forward_cls.__forward_new_init__
 
         for name, value in continue_cls.__dict__.items():
             if name == "__doc__":
                 if not value:
                     continue
-            if name == "__annotations__":
+            elif name == "__annotations__":
                 original = getattr(forward_cls, name, None)
                 if original:
                     original.update(value)
                     continue
                 # fall through to setattr below
-            if name in dont_overwrite_attributes:
+            elif name in dont_overwrite_attributes:
                 continue
             if name in existing_attributes:
                 continue
             setattr(forward_cls, name, value)
 
             # fix no-argument super! wow!
-            # real "forward class" / "continue class" support
-            # won't need hacks like this.
             if callable(value) and hasattr(value, "__closure__") and value.__closure__:
                 for closure in value.__closure__:
                     if closure.cell_contents == continue_cls:
