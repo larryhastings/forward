@@ -1,8 +1,8 @@
 ## forward
 
-### A prototype of "forward class" / "continue class" using decorators
+### A proof-of-concept of "forward class" / "continue class" using decorators
 
-This is a simple prototype of my proposed `forward class` / `continue class`
+This is a simple proof-of-concept of my proposed `forward class` / `continue class`
 syntax for Python, implemented using decorators.
 
 #### The proposed syntax for Python
@@ -139,9 +139,9 @@ the time, but the user could resort to `forward class`
 for the really stubborn edge cases that PEP 649 can't handle.
 
 
-### This prototype using decorators
+### This proof-of-concept using decorators
 
-This repo contains a prototype of the `forward class` /
+This repo contains a proof-of-concept of the `forward class` /
 `continue class` syntax, implemented using decorators.
 And, considering all that, it works surprisingly well!
 But naturally the syntax using this decorators-based version
@@ -193,7 +193,7 @@ Notes and caveats:
   This is what permits you to stack additional decorators on the class.
   (But again, you must call the `continue_` decorator first--it should be
   on the bottom.)
-* Like the proposed syntax, this prototype doesn't support decorators that
+* Like the proposed syntax, this proof-of-concept doesn't support decorators that
   both examine the contents of the class *and* return a different class,
   e.g. `@dataclass(slots=True)` in Python 3.10.
 
