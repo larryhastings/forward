@@ -3,7 +3,11 @@
 from forward import *
 
 @forward()
-class ImportantFunctionality:
+class NecessaryBaseClass:
+    ...
+
+@forward()
+class ImportantFunctionality(NecessaryBaseClass):
     ...
 
 @forward()

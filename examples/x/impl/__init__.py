@@ -3,8 +3,14 @@
 from forward import *
 import x
 
+
+@continue_(x.NecessaryBaseClass)
+class _____:
+    pass
+
+
 @continue_(x.ImportantFunctionality)
-class _:
+class _____:
 
     def __init__(self, s):
         self.s = s
