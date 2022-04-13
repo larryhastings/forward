@@ -189,6 +189,11 @@ Notes and caveats:
   (If the proposed `forward class`/`continue class` syntax is added
   to Python, we'll ensure it handles slots correctly, permitting them to be
   declared in the `continue` class.)
+* The proof-of-concept cannot support classes that inherit from a class
+  which defines `__init_subclass__`.  (If the proposed
+  `forward class`/`continue class` syntax is added to Python, it seems
+  reasonable to expect it'll support forward-declared classes that inherit
+  from a base class that defines `__init_subclass__`.)
 * The `continue_` decorator returns the original "forwarded" class object.
   This is what permits you to stack additional decorators on the class.
   (But again, you must call the `continue_` decorator first--it should be
