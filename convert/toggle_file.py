@@ -212,22 +212,43 @@ for arg in argv:
 
     if modified:
         if add_forward:
-            # insert import line
+            # insert import line... but where:
             line_no = 0
-            if lines[0].startswith("#!"):
+            done = False
+
+            # skip hashbang line
+            if lines[line_no].startswith("#!"):
                 line_no = 1
-            double_quotes = ('"""', "'''")
-            if lines[line_no].strip().startswith(double_quotes):
-                marker = lines[line_no].strip()[:3]
-                # detect """ foo """
-                if not lines[line_no].partition(marker)[2].strip():
+
+            while not lines[line_no].strip():
+                lines_no += 1
+
+            # is it a single line docstring, with single or triple quotes, and maybe a comment?
+            try:
+                value = eval(lines[line_no])
+                if isinstance(str, value):
+                    done = True
                     line_no += 1
-                while line_no < len(lines):
-                    if lines[line_no].strip().endswith(marker):
-                        line_no += 1
+            except SyntaxError:
+                pass
+
+            if not done:
+                double_quotes = ("'''", '"""')
+                for quotes in double_quotes:
+                    fields = lines[line_no].split(quotes)
+                    if fields > 1:
                         break
-                    line_no += 1
-                    continue
+
+                assert fields <= 2:
+                if fields == 1:
+                    # no triple quotes found, so no docstring
+                    pass
+                else:
+                    assert fields == 2
+                    while line_no < len(lines):
+                        if quotes in lines[line_no]:
+                            break
+                        line_no += 1
 
             lines.insert(line_no, import_line)
             lines.append("")
