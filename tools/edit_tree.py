@@ -161,7 +161,7 @@ for arg in sys.argv[1:]:
 
     path = arg
     try:
-        behavior, modified_files, modified_lines = editor.forward_edit_tree(path, behavior, ignore_files, ignore_directories, ignore_file_map, verbose=verbose, install_forward_module=install_forward_module)
+        behavior, modified_files, modified_lines = editor.forward_edit_tree(path, behavior, ignore_files, ignore_directories, dict(ignore_file_map), verbose=verbose, install_forward_module=install_forward_module)
         if verbose:
             print()
         print(f"{path}\n    {modified_files} files modified with {modified_lines} modified lines.")

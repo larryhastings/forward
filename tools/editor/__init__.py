@@ -151,6 +151,8 @@ def forward_edit_file(path, behavior, ignore, *, verbose=False, indent=""):
             continue
 
         if line == ignore_sentinel_line:
+            if verbose:
+                print(f"{indent}  skipping this file, found sentinel line.")
             return behavior, 0
 
         if state == "detect":
@@ -195,6 +197,8 @@ def forward_edit_file(path, behavior, ignore, *, verbose=False, indent=""):
 
             if stripped == forward_decorator_line:
                 # this file already has forward declarations!
+                if verbose:
+                    print(f"{indent}  skipping this file, behavior='add' and it already has forward declarations.")
                 return behavior, 0
 
             if is_class_definition(stripped):
@@ -243,9 +247,14 @@ def forward_edit_file(path, behavior, ignore, *, verbose=False, indent=""):
         raise RuntimeError(f"unhandled line {line!r}, current state {state!r}")
 
     if not lines:
+        if verbose:
+            print(f"{indent}  file is empty.")
         return behavior, 0
 
-    if modified_lines:
+    if not modified_lines:
+        if verbose:
+            print(f"{indent}  no modified lines in file.")
+    else:
         if behavior == "add":
             tree = compile(text, path, 'exec', ast.PyCF_ALLOW_TOP_LEVEL_AWAIT | ast.PyCF_ONLY_AST, dont_inherit=True)
 
@@ -274,12 +283,13 @@ def forward_edit_file(path, behavior, ignore, *, verbose=False, indent=""):
                     lines.pop()
                     modified_lines += 1
 
-    text = "\n".join(lines) + "\n"
+        text = "\n".join(lines) + "\n"
 
-    output_path = path
-    with open(output_path, "wt") as f:
-        f.write(text)
-    os.utime(output_path, ns=times_ns)
+        output_path = path
+        with open(output_path, "wt") as f:
+            f.write(text)
+        os.utime(output_path, ns=times_ns)
+
     if verbose:
         print(f"{indent}  returning {behavior=}, {modified_lines=}")
     return behavior, modified_lines
@@ -375,7 +385,7 @@ def forward_edit_tree(path, behavior, ignore_files, ignore_directories, ignore_f
         for filename in filenames:
             if not (filename and filename.endswith(".py")):
                 continue
-            relative_path = os.path.join(relative_dir, filename)
+            relative_path = os.path.normpath(os.path.join(relative_dir, filename))
             if verbose:
                 print()
                 print(f"  {relative_path=}")
