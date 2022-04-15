@@ -44,3 +44,4 @@ print("we just finished defining class Foo.\n")
 
 print(f"{type(Foo.__dict__)=}")
 print(f"{Foo.__dict__=}")
+print(f"{Foo.__mro__=}")

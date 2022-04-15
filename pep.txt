@@ -1,0 +1,437 @@
+
+This document is a loose pre-proto PEP for the new proposed
+"forward class" / "continue class" syntax.  Keep in mind,
+the formatting is a mess.  If I wind up submitting it as a
+real PEP, I'll be sure to clean it up first.
+
+
+/arry
+
+--------------------------------------
+
+
+PEP XXXX: Syntax for forward declarations of classes
+
+Overview
+--------
+
+Python currently has one statement to define a class, the `class` statement:
+
+```
+    class X():
+        # class body goes here
+        pass
+```
+
+This single statement declares the class, including its bases and metaclass,
+and also defines the contents of the class in the "class body".
+
+This PEP proposes an additional syntax for declaring a class, splitting
+this functionality across two statements.
+The first statement is `forward class`, which declares the class and binds
+the class object.
+The second statement is `continue class`, which defines the contents
+of the class in the "class body".
+
+To be clear, `forward class` creates the official, actual class object.
+Code that wants to take a reference to the class object may take references
+to the `forward class` declared class, and perform simple examinations on it.
+The main caveat is that the class can't be *instantiated* until after the
+`continue class` statement finishes.
+
+Defining class `X` from the previous example using this new syntax would read
+as follows:
+
+```
+    forward class X()
+
+    continue class X:
+        # class body goes here
+        pass
+```
+
+(Of course, the traditional `class` statement would continue to work.)
+
+
+Rationale
+---------
+
+Python programmers have had a minor problem with classes for years: there's
+no way to have early-bound circular dependencies between objects.  If A
+depends on B, and B depends on A, there's no good linear order that allows
+you to declare both.
+
+Most of the time, the dependencies were in late-binding code, e.g. inside
+a method.  So this was rarely an actual problem.  When this problem did
+arise in code run at definition-time, it was usually only a minor headache
+and could be easily worked around.
+
+But the explosion of static type analysis in Python, particularly with
+the `typing` module and the `mypy` tool, has made circular definition-time
+dependencies between classes commonplace--and much harder to solve.  Here's
+one simple example:
+
+```
+    class A:
+        value: B = None
+
+    class B:
+        value: A = None
+```
+
+An attribute of `B` is defined using a type annotation of `A`, and an
+attribute of `A` is defined using a type annotation of `B`.  There's
+no order to these two definitions that works; either `A` isn't defined
+yet, or `B` isn't defined yet.
+
+Various workarounds have been proposed to solve this problem,
+including two PEPs: PEP 563 (automatic stringized annotations) and PEP 649
+(delayed evaluation of annotations using functions).
+But no solution so far has been both satisfying and complete; either it
+is wordy and clumsy to use (manually stringizing annotations), or it also
+added restrictions and caused massive code breakage (PEP 563), or didn't
+solve every problem (PEP 649).  This proposed  `forward class` /
+`continue class` syntax should permit solving *every* forward-reference
+and circular-reference problem faced in Python, using an elegant and
+Pythonic new syntax.
+
+As a side benefit, `forward class` and `continue class` syntax enables
+rudimentary separation of "interface" from "implementation", at least for
+classes.  A user seeking to "hide" the implementation details of their
+code could put their class definitions in one module, and the implementations
+of those classes in a different module.
+
+
+Syntax
+------
+
+The `forward class` statement is the same as the `class` statement,
+except it doesn't end with a colon and is not followed by an indented block.
+Without any base classes or metaclass, the `forward class` statement is
+as follows:
+
+```
+    forward class X
+```
+
+This would declare class `X`.
+
+If `X` needs base classes or metaclass, the corresponding `forward class` statement
+would be as follows:
+
+```
+    forward class X(*bases, metaclass=None, **kwargs)
+```
+
+The `continue class` statement looks similar to a `class` statement without
+any bases or metaclass.  It ends with a colon, and is followed by the "class body":
+
+    continue class X:
+        # class body goes here
+        pass
+
+One important difference: the `X` in `continue class X:` is not a *name*,
+it's an *expression*.  This version also works:
+
+```
+    forward class X()
+    snodgrass = X
+
+    continue class snodgrass:
+        # class body goes here
+        pass
+```
+
+as well as this:
+
+```
+    import my_module
+
+    continue class my_module.X:
+        # class body goes here
+        pass
+```
+
+
+I think of the `forward class` / `continue class` syntax as
+cutting the `class` definition into two pieces, snipping away between
+the end of the parentheses and before the colon:
+
+```
+                 +------8X-- snip snip snip go the scissors!
+       class X() | :
+  -8X------------+
+          # class body goes here
+          pass
+```
+
+
+#### Semantics of forward-declared class objects
+
+`forward class X` declares a class, but the class is explicitly
+not fully defined yet.  It won't be fully defined and ready to
+be instantiated until after the corresponding `continue class`
+statement.  We'll refer to a class object in this state as
+a "forward-declared class object".  How does this object behave?
+
+As per the "consenting adults" rule, the forward-declared class
+object must permit most operations.  You should be able to examine
+the object, compare it to other objects, inspect some attributes
+(`__name__`, `__mro__`, `__class__`), and even set attributes.
+
+However, the user isn't permitted to instantiate a forward-declared
+class object until after the corresponding `continue class X`.
+We ensure this with a new dunder attribute, `__forward__`,
+which if present tells the Python runtime that this is a
+forward-declared class object.  The `continue class` statement
+would delete this attribute from the object, after which it
+could be instantiated.
+
+(Users could work around this constraint, or even delete `__forward__`
+if they so chose--again, the "consenting adults" rule applies.)
+
+It's explicitly permissible to create a forward-declared class
+object that never gets finished with a `continue class` statement.
+If all you need is an object that represents the class--say,
+to satisfy static type annotation use cases--a forward-declared
+class object works fine.
+
+A subsequent section will address the complexities of
+how `forward class` and `continue class` interact with metaclasses.
+For now, a note about forward-declared class objects declared with
+a metaclass implementing `__prepare__`.  The forward-declared class
+object *dict* will be the "dict-like object" returned by the
+`metaclass.__prepare__()` method.  This "dict-like object" won't
+be processed and discarded until after `continue class` processes
+the class body and calls the appropriate methods in the metaclass.
+
+
+#### Semantics of `continue class`
+
+`continue class` may only be run on a class once.
+(As Eric V. Smith pointed out in response to an early version of
+this proposal, allowing multiple "continue" declarations on the
+same class would lead directly to language-condoned monkey-patching.)
+
+
+#### Decorators
+
+Both the `forward class` and `continue class` statements
+support decorators, and the user may use decorators with either
+or both statements for the same class.  Of course, now that we
+are splitting the responsibilities of the `class` statement
+between two new statements, which decorator goes with which
+statement becomes a new concern.  In general, decorators that
+don't examine the contents of the class, but simply want to
+register the class object and its name, can decorate the
+`forward class` statement, and all decorators that meaningfully
+examine the contents of the class should decorate the
+`continue class` statement.
+
+This leads us to one known use case where a decorator that
+works with conventionally-declared classes *cannot* work properly
+with either `forward class` *or* `continue class`: a decorator
+that subclasses the class it's decorating, and returns that
+subclass, and *also* must meaningfully examine the declared
+contents of that class.
+
+An example of a decorator that does
+this is the new 3.10 feature `@dataclass(slots=True)`.
+However, we also have an idea to ameliorate this specific
+situation.  Right now, a class that uses `__slots__` must define
+them in the class body, as that member is read before the class
+name is bound (or before any descriptors are run).  If we make
+that processing lazy, so that `__slots__` isn't examined until the
+first time the class is *instantiated,* `@dataclass(slots=True)`
+wouldn't need to subclass the class, and thus would work fine when
+decorating a `continue class` statement.
+
+One final note.  Why must the base and metaclass be declared
+with the `forward class` statement?  The point of this new
+syntax is to allow creating the real class object, permitting
+users of the class to take references to it early, before it's
+fully defined.  And the class could be declared with a
+metaclass, and the metaclass could have a `__new__`, which
+means it's responsible for creating the class object, and
+this syntax would have to preserve that behavior.
+
+
+#### __slots__ and decorators
+
+The implementation of `__slots__` would need a small tweak to
+work properly with `forward class` / `continue class` and
+decorators.  Currently, the internal machinery that processes
+`__slots__` happens at some point inside the runtime of the `class`
+statement, after the class body is executed, but before decorators
+are run.  This in and of itself does not pose a problem for
+the new `forward class` syntax; we could process `__slots__` at
+essentially the same step in the process and it would work fine.
+
+The problem arises with decorators that want to add slots to
+a class that doesn't have them.  The usual method is to
+examine the class's attributes in the decorator, then dynamically
+create a subclass that defines the equivalent slots, then have
+the decorator return this dynamically-created class.  As one
+example, this is how the new `@dataclass(slots=True)` feature
+works in Python 3.10.
+
+This doesn't mesh well with `forward class` / `continue class`
+because you can't use that technique inside a decorator with
+either statement.  You can't do it inside a decorator
+on `forward class` because you can't examine the class's
+attributes yet, as we haven't run the class body yet.
+And you can't do it inside a decorator on `continue class`,
+because the class object has already been bound and been
+made visible to the world, so other users may have taken
+references to it.
+
+The solution we propose here, suggested by Eric V. Smith, is
+to lazy-process `__slots__`.  If we delay the processing
+of `__slots__` until the first instantiation of the class,
+this would permit setting / modifying `__slots__` after the
+class was defined.  This would allow `@dataclass(slots=True)`
+to skip the subclass trick and mutate the class directly,
+allowing it to usefully decorate a `continue class` statement.
+
+
+#### Metaclasses
+
+The existing semantics of metaclasses present a thorny problem
+for `forward class` and `continue class`.
+
+
+#### forward classes and PEP 649
+
+I suggest that `forward class` meshes nicely with PEP 649.
+
+PEP 649 solves the forward-reference and circular-reference
+problem for a lot of use cases, but not all.  So by itself
+it's not quite a complete solution to the problem.
+
+This `forward class` proposal seems like it should solve *all*
+the forward-reference and circular-reference problems faced
+by Python users today.  However, its use requires
+backwards-incompatible code changes.
+
+By adding both PEP 649 and `forward class` to Python, we
+get the best of both worlds.  PEP 649 should handle most
+forward-reference and circular-reference problems, but the
+user could resort to `forward class` for the stubborn edge
+cases PEP 649 didn't handle.
+
+
+### A proof-of-concept using decorators
+
+This repo contains a proof-of-concept of the `forward class` /
+`continue class` syntax, implemented using decorators.
+It works surprisingly well, considering.
+
+But naturally the syntax using this decorators-based version
+can't be quite as clean.  The equivalent declaration for
+`class X` using these decorators would be as follows:
+
+```Python
+    from forward import *
+
+    @forward()
+    class X():
+       ...
+
+    @continue_(X)
+    class _:
+       # class body goes here
+       pass
+```
+
+Specifically:
+
+* You have to make the `forward` module available somehow.  You can just copy the
+  `forward` directory into the directory you want to experiment in, or you can
+  install it locally in your Python install or venv by installing the `flit`
+  package from PyPI and running `flit install -s` .
+* You must import and use the two decorators from the `forward` module.
+  The easiest way is with `from forward import *` .
+* For the `forward class` statement, you instead decorate a conventional class
+  declaration with `@forward()`.  The class body should be empty, with either
+  a single `pass` statement or a single ellipsis `...` on a line by itself;
+  the ellipsis form is preferred.  You should name this class with the desired
+  final name of your class.
+* For the `continue class` statement, you instead decorate a conventional
+  class declaration with `@continue_()`, passing in the forward-declared class
+  object as a parameter to the decorator.  You can use the original name of
+  the class if you wish, or a throwaway name like `_` as per the example.
+* You may use additional decorators with either or both of these decorators.
+  However it's vital that `@forward()` and `@continue_()` are the
+  *first* decorators run--that is, they should be on the *bottom* of the
+  stack of decorators.
+
+Notes and caveats:
+
+* The `continue_` decorator returns the original "forwarded" class object.
+  This is what permits you to stack additional decorators on the class.
+  (But, again, you *must* call the `continue_` decorator first--it should be
+  on the bottom.)
+* To use `__slots__`, please declare them in the `forward` class.
+  (If the proposed `forward class`/`continue class` syntax is added
+  to Python, we'll ensure it handles slots correctly, permitting them to be
+  declared in the `continue` class.)
+* The proof-of-concept can't support classes that inherit from a class
+  which defines `__init_subclass__`.  (If the proposed
+  `forward class`/`continue class` syntax is added to Python, it seems
+  reasonable to expect it'll support forward-declared classes that inherit
+  from a base class that defines `__init_subclass__`.)
+* Like the proposed syntax, this proof-of-concept doesn't support decorators that
+  both examine the contents of the class *and* return a different class,
+  e.g. `@dataclass(slots=True)` in Python 3.10.
+* Finally, this proof-of-concept doesn't work with metaclasses that
+  override either `__new__` or `__init__`, where those functions examine
+  the `namespace` argument in any meaningful way.
+
+
+#### tools/
+
+There are some tools in the `tools/` directory that will (attempt to)
+automatically add or remove the `@forward()` decorator to class definitions
+in Python scripts.  It turns this:
+
+```Python
+    class foo(...):
+        pass
+```
+
+into this:
+
+```Python
+    @forward()
+    class foo(...):
+        ...
+
+    @continue_(foo)
+    class _____:
+        pass
+```
+
+`tools/edit_file.py` will edit one or more Python files specified on the
+command-line, making the above change.  By default it will toggle the presence of `@forward`
+decorators.  You can also specify explicit behavior:
+
+`-a` adds `@forward()` decorators to `class` statements that don't have them.
+`-r` removes `@forward` decorators, changing back to conventional `class` statements.
+`-t` requests that it "toggle" the state of `@forward()` decorators.
+
+The parser is pretty dumb, so don't run it on anything precious.  If it goofs up, sorry!
+
+`tools/edit_tree.py` applies `edit_py.py` to all `*.py` files found anywhere under
+a particular directory.
+
+`tools/edit_stdlib.py` was an attempt to intelligently apply `edit_file.py` to the `Lib`
+tree of a CPython checkout.  Sadly, the experiment didn't really work out; it seemed
+like there were so many exceptions where the brute-force modification didn't work,
+either due to descriptors or metaclasses, that I gave up on the time investment.
+It's provided here in a non-functional state, in case anyone wants to experiment with
+it further.
+
+Also, it's intentionally delicate; it only works on git checkout trees, and only with
+one specific revision id:
+
+    7b87e8af0cb8df0d76e8ab18a9b12affb4526103
