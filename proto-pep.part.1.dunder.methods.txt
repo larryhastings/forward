@@ -77,10 +77,10 @@ one simple example:
 
 ```Python
     class A:
-        value: B = None
+        value: B
 
     class B:
-        value: A = None
+        value: A
 ```
 
 An attribute of `B` is defined using a type annotation of `A`, and an
@@ -104,6 +104,12 @@ rudimentary separation of "interface" from "implementation", at least for
 classes.  A user seeking to "hide" the implementation details of their
 code could put their class definitions in one module, and the
 implementations of those classes in a different module.
+
+This new syntax is not intended to replace the traditional `class`
+declaration syntax in Python.  If this PEP were accepted, the `class`
+statement would still be the preferred mechanism for creating classes
+in Python; `forward class` should only be used when it confers some
+specific benefit.
 
 
 Syntax
@@ -261,14 +267,14 @@ This leads us to an example of a decorator that, as of 3.10,
 wouldn't be usable with classes declared by `forward class`.
 It's the new 3.10 feature `@dataclass(slots=True)`.  When called
 in this way, dataclass examines the attributes of the class it
-has decorated, dynamically constructs a subclass using `__slots__`,
-and returns the subclass.
+has decorated, dynamically constructs a new class using `__slots__`,
+and returns this new class.
 
 Since this decorator meaningfully examines the class, it must
 be used with `continue class`.  But, this decorator also returns
-an object other the original class--in this case, a subclass--which
-means it's inapproriate for `continue class` and should be called
-with `forward class`.  What to do?
+an object other the original class, which means it's inapproriate
+for `continue class` and should be called with `forward class`.
+What to do?
 
 We have a separate idea to ameliorate this specific situation.
 Right now, a class that uses `__slots__` *must* define them in
@@ -276,8 +282,8 @@ the class body, as that member is read before the class name is
 bound (or before any descriptors are run).  But we can simply
 relax that, and make processing `__slots__` lazy, so that it
 isn't examined until the first time the class is *instantiated.*
-This would mean `@dataclass(slots=True)` wouldn't need to subclass
-the class, and thus would work fine when decorating a
+This would mean `@dataclass(slots=True)` could simply return the
+original class, and thus would work fine when decorating a
 `continue class` statement.
 
 
@@ -512,6 +518,18 @@ get the best of both worlds.  PEP 649 should handle most
 forward-reference and circular-reference problems, but the
 user could resort to `forward class` for the stubborn edge
 cases PEP 649 didn't handle.
+
+In particular, combining this PEP with PEP 649 achieves total
+coverage of the challenges cited by PEP 563's *Rationale* section:
+
+> * forward references: when a type hint contains names that have not been
+>   defined yet, that definition needs to be expressed as a string literal;
+> * type hints are executed at module import time, which is not
+>   computationally free.
+
+PEP 649 solves many forward reference problems, and delays the evaluation
+of annotations until they are used.  This PEP solves the remaining forward
+reference problems.
 
 
 ### A proof-of-concept using decorators
