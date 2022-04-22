@@ -5,24 +5,25 @@ Just a quick note from me on the proto-PEP and the two proposed
 implementations.  When I started exploring this approach,
 I didn't suspect it'd require such sweeping changes to be feasible.
 Specifically, I didn't think I was going to propose changing the
-fundamental class creation mechanism.  That's an enormous change
+fundamental class creation mechanism.  That's an enormous change,
 and it makes me uncomfortable; I suspect I won't be alone in having
 that reaction.
 
 The alternate implementation with proxy objects was borne of my
 reaction, but it's worrisome too.  It's a hack--though whether it's
-a "big" hack or a "small" hack is a fine debatable point.  Anyway,
-I'm specifically worried about the underlying class object escaping
-the proxy and becoming visible inside Python somehow.  If that happened,
-we'd have two objects representing the same "type" at runtime, a
-situation that could quickly become confusing.
+a "big" hack or a "small" hack is debatable.  Anyway, I'm
+specifically worried about the underlying class object escaping
+the proxy and becoming visible inside Python somehow.  If that
+happened, we'd have two objects representing the same "type" at
+runtime, a situation that could quickly become confusing.
 
 Also, as I hopefully made clear in the "alternate implementation"
 approach using a class proxy object, I'm not 100% certain that the
 proxy will work in all cases.  I ran out of time to investigate
-it more--I wanted to post this stuff with some lead time before
+it more--I wanted to post this idea with some lead time before
 the 2022 Language Summit, so that folks had time to read and digest
-it and discuss it before the Summit.
+it and discuss it before the Summit.  I have some implementation
+ideas--the "class proxy" class may need its own exotic metaclass.
 
 Ultimately I'm posting this proto-PEP to foster discussion.  I'm
 confident that "forward class" / "continue class" could solve all
@@ -31,6 +32,3 @@ we need to collectively answer are
 
   * how should the implementation work, and
   * is the cost of the implementation worth it?
-
-
-/arry

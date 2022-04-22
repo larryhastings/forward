@@ -1,2 +1,102 @@
 Subject: Alternate implementation proposal for "forward class" using a proxy object
 
+
+The entire point of the "forward class" statement is that it creates
+the real actual class object.  But what if it wasn't actually the
+"real" class object?  What if it was only a proxy for the real object?
+
+In this scenario, the syntax of "forward object" remains the same.
+You define the class's bases and metaclass.  But all "forward class"
+does is create a simple, lightweight class proxy object.  This object
+has a few built-in dunder values, __name__ etc.  It also allows you
+to set attributes, so let's assume (for now) it calls
+metaclass.__prepare__ and uses the returned "dict-like object" as
+the class proxy object __dict__.
+
+"continue class" internally performs all the rest of the
+class-creation machinery.  (Everything except __prepare__, as we
+already called that.)  The first step is metaclass.__new__, which
+returns the real class object.  "continue class" takes that
+object and calls a method on the class proxy object that says
+"here's your real class object".  From that moment on, the proxy
+becomes a pass-through for the "real" class object, and nobody
+ever sees a reference to the "real" class object ever again.
+Every interaction with the class proxy object is passed through
+to the underlying class object.  __getattribute__ calls on the
+proxy look up the attribute in the underlying class object.  If
+the object returned is a bound method object, it rebinds that
+callable with the class proxy instead, so that the "self" passed
+in to methods is the proxy object.  Both base_cls.__init_subclass__
+and cls.__init__ see the proxy object during class creation.  As far
+as Python user code is concerned, the class proxy *is* the class,
+in every way, important or not.
+
+The upside: this moves all class object creation code into "continue
+class" call.  We don't have to replace __new__ with two new calls.
+
+The downside: a dinky overhead to every interaction with a "forward
+class" class object and with instances of a "forward class" class
+object.
+
+
+A huge concern: how does this interact with metaclasses implemented
+in C?  If you make a method call on a proxy class object, and that
+calls a C function from the metaclass, we'd presumably have to pass
+in the "real class object", not the proxy class object.  Which means
+references to the real class object could leak out somewhere, and
+now we have a real-class-object vs proxy-class-object identity crisis.
+Is this a real concern?
+
+
+A possible concern: what if metaclass.__new__ keeps a reference to
+the object it created?  Now we have two objects with an identity
+crisis.  I don't know if people ever do that.  Fingers crossed that
+they don't.  Or maybe we add a new dunder method:
+
+    @special_cased_staticmethod
+    metaclass.__bind_proxy__(metaclass, proxy, cls)
+
+This tells the metaclass "bind cls to this proxy object", so
+metaclasses that care can update their database or whatever.
+The default implementation uses the appropriate mechanism,
+whatever it is.
+
+One additional probably-bad idea: in the case where it's just a
+normal "class" statement, and we're not binding it to a proxy,
+should we call this?
+
+    metaclass.__bind_proxy__(metaclass, None, cls)
+
+The idea there being "if you register the class objects you create,
+do the registration in __bind_proxy__, it's always called, and you'll
+always know the canonical object in there".  I'm guessing probably not,
+in which case we tell metaclasses that track the class objects we
+create "go ahead and track the object you return from __new__, but
+be prepared to update your tracking info in case we call __bind_proxy__
+on you".
+
+
+A small but awfully complicated wrinkle here: what do we do if the
+metaclass implements __del__?  Obviously, we have to call __del__
+with the "real" class object, so it can be destroyed properly.
+But __del__ might resurrect that object, which means someone took a reference to it.
+
+
+
+One final note.  Given that, in this scenario, all real class creation
+happens in "continue class", we could move the bases and metaclass
+declaration down to the "continue class" statement.  The resulting
+syntax would look like:
+
+    forward class X
+
+    ...
+
+    continue class X(base1, base2, metaclass=AmazingMeta, rocket="booster")
+
+Is that better? worse? doesn't matter?  I don't have an intuition about
+it right now--I can see advantages to both sides, and no obvious
+deciding factor.  Certainly this syntax prevents us from calling
+__prepare__ so early, so we'd have to use a real dict in the "forward
+class" proxy object until we reached continue, then copy the values from
+that dict into the "dict-like object", etc.
