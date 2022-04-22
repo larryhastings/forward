@@ -1,0 +1,2 @@
+Subject: Alternate implementation proposal for "forward class" using a proxy object
+

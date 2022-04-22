@@ -1,3 +1,6 @@
+
+print("Defining metaclasses, base classes, and base metaclasses.\n")
+
 _step_no = 0
 
 def step_no():
@@ -15,7 +18,9 @@ class MyPreparedDict(dict):
 
 class MetaClass_Base(type):
     def __init_subclass__(cls, **kwargs):
-        print(f"step {step_no()}: metaclass_base.__init_subclass__\n  {cls=}\n  {kwargs=}\n")
+        # We aren't actually interested in when this is run.
+        # We're only printing the dunder methods called when defining class foo.
+        # print(f"step {step_no()}: metaclass_base.__init_subclass__\n  {cls=}\n  {kwargs=}\n")
         return None
 
 class MetaClass(MetaClass_Base, pepsi="and milk"):
@@ -23,31 +28,32 @@ class MetaClass(MetaClass_Base, pepsi="and milk"):
         print(f"step {step_no()}: metaclass __prepare__\n  {name=}\n  {bases=}\n  {kwargs=}\n")
         return MyPreparedDict()
 
-    def __new__(mcls, name, bases, namespace, **kwargs):
-        print(f"step {step_no()}: metaclass __new__\n  {mcls=}\n  {name=}\n  {bases=}\n  {namespace=}\n  {kwargs=}\n")
-        return super().__new__(mcls, name, bases, namespace, **kwargs)
+    def __new__(metaclass, name, bases, namespace, **kwargs):
+        print(f"step {step_no()}: metaclass __new__\n  {metaclass=}\n  {name=}\n  {bases=}\n  {namespace=}\n  {kwargs=}\n")
+        return super().__new__(metaclass, name, bases, namespace, **kwargs)
 
-    def __init__(mcls, name, bases, namespace, **kwargs):
-        print(f"step {step_no()}: metaclass __init__\n  {mcls=}\n  {name=}\n  {bases=}\n  {namespace=}\n  {kwargs=}\n")
+    def __init__(metaclass, name, bases, namespace, **kwargs):
+        print(f"step {step_no()}: metaclass __init__\n  {metaclass=}\n  {name=}\n  {bases=}\n  {namespace=}\n  {kwargs=}\n")
         return super().__init__(name, bases, namespace, **kwargs)
 
 class BaseClass_A:
     def __init_subclass__(cls, **kwargs):
-        print(f"step {step_no()}: first baseclass.__init_subclass__\n  {cls=}\n  {kwargs=}\n")
+        print(f"step {step_no()}: BaseClass_A.__init_subclass__ (first defined base class)\n  {cls=}\n  {kwargs=}\n")
         return super().__init_subclass__(**kwargs)
 
 class BaseClass_B:
     def __init_subclass__(cls, **kwargs):
-        print(f"step {step_no()}: second baseclass.__init_subclass__\n  {cls=}\n  {kwargs=}\n")
+        print(f"step {step_no()}: BaseClass_B.__init_subclass__ (second defined base class)\n  {cls=}\n  {kwargs=}\n")
         return None
 
-print("next up: class Foo\n")
+
+print("The next line is the declaration of class Foo.\n")
 
 class Foo(BaseClass_A, BaseClass_B, metaclass=MetaClass, rocket="booster"):
-    print("class Foo class body executed here.\n")
+    print("Now executing the class body for class Foo.\n")
     a = 3
 
-print("we just finished defining class Foo.\n")
+print("Just finished class Foo.\n")
 
 print(f"{type(Foo.__dict__)=}")
 print(f"{Foo.__dict__=}")

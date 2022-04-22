@@ -1,8 +1,9 @@
+Subject: Proto-PEP: Forward declarations of classes
 
-This document is a loose pre-proto PEP for the new proposed
+This document is a loose proto-PEP for a new
 "forward class" / "continue class" syntax.  Keep in mind,
 the formatting is a mess.  If I wind up submitting it as a
-real PEP, I'll be sure to clean it up first.
+real PEP I'll be sure to clean it up first.
 
 
 /arry
@@ -10,34 +11,35 @@ real PEP, I'll be sure to clean it up first.
 --------------------------------------
 
 
-PEP XXXX: Syntax for forward declarations of classes
+PEP XXXX: Forward declarations of classes
 
 Overview
 --------
 
 Python currently has one statement to define a class, the `class` statement:
 
-```
+```Python
     class X():
         # class body goes here
-        pass
+        def __init__(self, key):
+            self.key = key
 ```
 
 This single statement declares the class, including its bases and metaclass,
 and also defines the contents of the class in the "class body".
 
-This PEP proposes an additional syntax for declaring a class, splitting
-this functionality across two statements.
-The first statement is `forward class`, which declares the class and binds
-the class object.
-The second statement is `continue class`, which defines the contents
-of the class in the "class body".
+This PEP proposes an additional syntax for declaring a class which splits
+this work across two statements:
+* The first statement is `forward class`, which declares the class and binds
+  the class object.
+* The second statement is `continue class`, which defines the contents
+  of the class in the "class body".
 
-To be clear, `forward class` creates the official, actual class object.
+To be clear: `forward class` creates the official, actual class object.
 Code that wants to take a reference to the class object may take references
-to the `forward class` declared class, and perform simple examinations on it.
-The main caveat is that the class can't be *instantiated* until after the
-`continue class` statement finishes.
+to the `forward class` declared class, and interact with it as normal.
+However, a class created by `forward class` can't be *instantiated*
+until after the matching `continue class` statement finishes.
 
 Defining class `X` from the previous example using this new syntax would read
 as follows:
@@ -47,10 +49,12 @@ as follows:
 
     continue class X:
         # class body goes here
-        pass
+        def __init__(self, key):
+            self.key = key
 ```
 
-(Of course, the traditional `class` statement would continue to work.)
+This PEP does not propose altering or removing the traditional `class` statement;
+it would continue to work as before.
 
 
 Rationale
@@ -58,20 +62,20 @@ Rationale
 
 Python programmers have had a minor problem with classes for years: there's
 no way to have early-bound circular dependencies between objects.  If A
-depends on B, and B depends on A, there's no good linear order that allows
-you to declare both.
+depends on B, and B depends on A, there's no linear order that allows
+you to cleanly declare both.
 
-Most of the time, the dependencies were in late-binding code, e.g. inside
-a method.  So this was rarely an actual problem.  When this problem did
-arise in code run at definition-time, it was usually only a minor headache
-and could be easily worked around.
+Most of the time, the dependencies were in late-binding code, e.g. A refers
+to B inside a method.  So this was rarely an actual problem at runtime.  When
+this problem did arise, in code run at definition-time, it was usually only
+a minor headache and could be easily worked around.
 
 But the explosion of static type analysis in Python, particularly with
 the `typing` module and the `mypy` tool, has made circular definition-time
 dependencies between classes commonplace--and much harder to solve.  Here's
 one simple example:
 
-```
+```Python
     class A:
         value: B = None
 
@@ -84,22 +88,22 @@ attribute of `A` is defined using a type annotation of `B`.  There's
 no order to these two definitions that works; either `A` isn't defined
 yet, or `B` isn't defined yet.
 
-Various workarounds have been proposed to solve this problem,
+Various workarounds and solutions have been proposed to solve this problem,
 including two PEPs: PEP 563 (automatic stringized annotations) and PEP 649
 (delayed evaluation of annotations using functions).
-But no solution so far has been both satisfying and complete; either it
-is wordy and clumsy to use (manually stringizing annotations), or it also
-added restrictions and caused massive code breakage (PEP 563), or didn't
-solve every problem (PEP 649).  This proposed  `forward class` /
-`continue class` syntax should permit solving *every* forward-reference
-and circular-reference problem faced in Python, using an elegant and
-Pythonic new syntax.
+But nothing so far has been both satisfying and complete; either it
+is wordy and clumsy to use (manually stringizing annotations), or it
+added restrictions and caused massive code breakage for runtime use of
+annotations (PEP 563), or simply didn't solve every problem (PEP 649).
+This proposed  `forward class` / `continue class` syntax should permit
+solving *every* forward-reference and circular-reference problem faced
+in Python, using an elegant and Pythonic new syntax.
 
 As a side benefit, `forward class` and `continue class` syntax enables
 rudimentary separation of "interface" from "implementation", at least for
 classes.  A user seeking to "hide" the implementation details of their
-code could put their class definitions in one module, and the implementations
-of those classes in a different module.
+code could put their class definitions in one module, and the
+implementations of those classes in a different module.
 
 
 Syntax
@@ -117,21 +121,22 @@ as follows:
 This would declare class `X`.
 
 If `X` needs base classes or metaclass, the corresponding `forward class` statement
-would be as follows:
+would be as follows, rendered in a sort of "function prototype" manner:
 
 ```
-    forward class X(*bases, metaclass=None, **kwargs)
+    forward class X(*bases, metaclass=object, **kwargs)
 ```
 
-The `continue class` statement looks similar to a `class` statement without
-any bases or metaclass.  It ends with a colon, and is followed by the "class body":
+The `continue class` statement is similar to a `class` statement
+without any bases or metaclass.  It ends with a colon,
+and is followed by the "class body":
 
     continue class X:
         # class body goes here
         pass
 
 One important difference: the `X` in `continue class X:` is not a *name*,
-it's an *expression*.  This version also works:
+it's an *expression*.  This code is valid:
 
 ```
     forward class X()
@@ -152,24 +157,24 @@ as well as this:
         pass
 ```
 
+Using this new syntax, the forward-reference problem illustrated
+in the *Rationale* section above is now easy to solve:
 
-I think of the `forward class` / `continue class` syntax as
-cutting the `class` definition into two pieces, snipping away between
-the end of the parentheses and before the colon:
+```Python
+    forward class B
 
-```
-                 +------8X-- snip snip snip go the scissors!
-       class X() | :
-  -8X------------+
-          # class body goes here
-          pass
+    class A:
+        value: B = None
+
+    continue class B:
+        value: A = None
 ```
 
 
 #### Semantics of forward-declared class objects
 
 `forward class X` declares a class, but the class is explicitly
-not fully defined yet.  It won't be fully defined and ready to
+not yet fully defined.  It won't be fully defined and ready to
 be instantiated until after the corresponding `continue class`
 statement.  We'll refer to a class object in this state as
 a "forward-declared class object".  How does this object behave?
@@ -297,7 +302,195 @@ allowing it to usefully decorate a `continue class` statement.
 #### Metaclasses
 
 The existing semantics of metaclasses present a thorny problem
-for `forward class` and `continue class`.
+for `forward class` and `continue class`.  First, a review of
+how class definition works.
+
+Most of the mechanisms involved with defining a class happen
+internally to the interpreter.  However, there are a number
+of special methods (aka "dunder methods") called during class
+construction that are visible in user code.  Empirical testing
+with the current version of Python (as of this writing, 3.10.4)
+reveals the order in which all this work is done.
+
+When Python executes the definition of this class:
+
+```Python
+    class Foo(BaseClass, metaclass=MetaClass):
+        # class body is here
+        pass
+```
+
+these events are visible in this order:
+
+1. Python calls `MetaClass.__prepare__`.
+2. Python executes the "class body" for class Foo.
+3. Python calls `MetaClass.__new__`.
+4. Python calls `BaseClass.__init_subclass__`.
+   (If multiple base classes define `__init_subclass__`,
+   they're called in MRO order.)
+5. Python calls `MetaClass.__init__`.
+6. The `class` statement binds the class object to the name `Foo`.
+
+The big problem this presents for `forward class`: the
+"class body" is executed before the `MetaClass.__new__`.
+This is necessary because one of the parameters to `MetaClass.__new__`
+is `namespace`, the "dict-like object" returned by `MetaClass.__prepare__`
+and initialized by executing the class body using that object
+as a sort of locals dictionary.
+
+This creates a chicken-and-egg problem: `forward class` needs
+to define the class object, but the class object is defined
+by `MetaClass.__new__`, and `MetaClass.__new__` can't run until
+after the class body.
+
+The unfortunate but necessary solution: split `__new__` into
+two new special methods on metaclasses, `__new_forward__`
+and `__new_continue__`.  As a reminder, here's the prototype
+for `__new__` on a metaclass:
+
+```Python
+    def __new__(metaclass, name, bases, namespace, **kwargs):
+```
+
+The two new special methods would have the following prototypes:
+
+```Python
+    def __new_forward__(metaclass, name, bases, namespace, **kwargs):
+
+    def __new_continue__(metaclass, cls, **kwargs):
+```
+
+`__new_forward__` should create the class object.  It should
+set the `namespace` member as the class dict, but in general
+should not examine it contents.  In particular, `__new_forward__`
+cannot make any assumptions about whether or not the class body
+has been executed yet.
+
+`__new_continue__` is guaranteed to be called after the
+class body has been executed.
+
+The externally-visible parts of class construction would
+run in a different order for classes constructed using
+`forward class` and `continue class`.  First, the visible
+interactions from the `forward class` statement:
+
+1. Python calls `MetaClass.__prepare__`.
+2. Python calls `MetaClass.__new_forward__`.
+3. The `forward class` statement binds the (forward-declared)
+   class object to the name `Foo`.
+
+And now, the visible interactions from the `continue class`
+statement:
+
+1. Python executes the class body.
+2. Python calls `MetaClass.__new_continue__`.
+3. Python calls `BaseClass.__init_subclass__`.
+   (If multiple base classes define `__init_subclass__`,
+   they're called in MRO order.)
+4. Python calls `MetaClass.__init__`.
+
+It's important to note that, while `namespace` is passed
+in to `__new_forward__`, it's not yet initialized with the
+class body.  It's passed in here because the "dict-like object"
+returned by `MetaClass.__prepare__` is used as the `__dict__`
+for the forward-declared class object.  The class object
+created in `__new_forward__` must take a reference to it.
+
+Splitting `__new__` into two methods in this manner has several
+ramifications for existing code.
+
+First, Python still needs to support `MetaClass.__new__`
+for backwards compatibility with existing code.  Therefore,
+when executing the `class` statement, Python will still call
+`MetaClass.__new__`.  In fact, for maximum backwards
+compatibility, the order of externally-visible events
+for the `class` statement should not change at all.
+
+The default implementation of `MetaClass.__new__` will be
+changed to call `__new_forward__` and `__new_continue__`.
+The implementation will be something like as follows,
+shown in pseudo-code:
+
+```Python
+    def __new__(metaclass, name, bases, namespace, **kwargs):
+        cls = metaclass.__new_forward__(metaclass, name, bases, namespace, **kwargs)
+        metaclass.__new_continue__(metaclass, cls, namespace, **kwargs)
+        return cls
+```
+
+This means the order of events will be slightly different
+between a class defined with the `class` statement and
+a class defined with the `forward class` and `continue class`
+statements.  With a `class` statement, the class body will be
+run *before* `__new_forward__` is called, but with a `forward class`
+statement, the class body will be run *after* `__new_forward__`
+is called.
+
+User code that defines its own metaclass with its own `__new__`
+must also continue to work.  But this leads us to a dangerous
+boundary condition:
+  * if user code defines a metaclass, and
+  * that metaclass defines `__new__` but not `__new_forward__` or
+    `__new_continue__`, and
+  * user code then uses that metaclass in a `forward class`
+    declaration, then
+Python *must* throw a `TypeError` exception.  This situation is
+unsafe: clearly the intention with the user's metaclass is to
+override some behavior in `__new__`, but the `forward new` statement
+never call their `__new__`.
+
+(It's safe to use a metaclass with `forward class` if it doesn't
+define `__new__`, or if it defines both `__new__` and either
+`__new_forward__` or `__new_continue__`.  It's also safe to
+use a metaclass with `class` if it defines either `__new_forward__`
+or `__new_continue__` but not `__new__`, because the default `__new__`
+will call both `__new_forward__` and `__new_continue__`.)
+
+Note that this change to metaclass dunder methods can be
+
+#### Interactions between `class`, `forward class`, and `continue class`
+
+`class` and `forward class` both bind a name to a newly-created object.
+Thus, in the same way that you can have two `class` statements that
+bind and re-bind the same name:
+
+```Python
+    class C:
+        pass
+    class C:
+        pass
+```
+
+You can execute `class` and `forward class` statements in any order
+to bind and re-bind the same name:
+
+```Python
+    class C:
+        pass
+    forward class C
+```
+
+This works as expected, rebinding `C` to a new value.
+
+Executing a `continue class` statement with a class defined by the
+`class` statement raises a `ValueError` exception.
+Executing a `continue class` statement with a class defined by the
+`forward class` statement that has already had `continue class`
+executed on it raises a `ValueError` exception.
+
+(It's expected that knowledgeable users will be able to trick
+Python into executing `continue class` on the same class multiple
+times by interfering with "dunder" attributes.  The same tricks
+may also permit users to trick Python into executing `continue class`
+on a class defined by the `class` statement.  This is undefined
+and unsupported behavior, but Python will not prevent it.)
+
+
+#### Alternate syntax
+
+Instead of `forward class`, we could use `def class`.  It's not as clear,
+which is why this PEP proposes `forward class` instead.  But it has the
+advantage of not adding a new keyword to the language.
 
 
 #### forward classes and PEP 649
@@ -308,10 +501,10 @@ PEP 649 solves the forward-reference and circular-reference
 problem for a lot of use cases, but not all.  So by itself
 it's not quite a complete solution to the problem.
 
-This `forward class` proposal seems like it should solve *all*
-the forward-reference and circular-reference problems faced
+This `forward class` proposal should solve *all* the
+forward-reference and circular-reference problems faced
 by Python users today.  However, its use requires
-backwards-incompatible code changes.
+backwards-incompatible code changes to user code.
 
 By adding both PEP 649 and `forward class` to Python, we
 get the best of both worlds.  PEP 649 should handle most
@@ -383,7 +576,7 @@ Notes and caveats:
 * Like the proposed syntax, this proof-of-concept doesn't support decorators that
   both examine the contents of the class *and* return a different class,
   e.g. `@dataclass(slots=True)` in Python 3.10.
-* Finally, this proof-of-concept doesn't work with metaclasses that
+* This proof-of-concept doesn't work with metaclasses that
   override either `__new__` or `__init__`, where those functions examine
   the `namespace` argument in any meaningful way.
 
@@ -427,9 +620,9 @@ a particular directory.
 `tools/edit_stdlib.py` was an attempt to intelligently apply `edit_file.py` to the `Lib`
 tree of a CPython checkout.  Sadly, the experiment didn't really work out; it seemed
 like there were so many exceptions where the brute-force modification didn't work,
-either due to descriptors or metaclasses, that I gave up on the time investment.
-It's provided here in a non-functional state, in case anyone wants to experiment with
-it further.
+either due to descriptors, metaclasses, or base classes with `__init_subclass__`,
+that I gave up on the time investment.  It's provided here in a non-functional
+state in case anyone wants to experiment with it further.
 
 Also, it's intentionally delicate; it only works on git checkout trees, and only with
 one specific revision id:
